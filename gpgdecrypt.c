@@ -7,6 +7,19 @@
 #include <string.h>
 
 #define BUF_SIZE 4096
+// fail_if_err macro borrowed from the t-support.c file in the tests/gpg directory of the gpgme tarball
+#define fail_if_err(error)					\
+  do								\
+    {								\
+      if (error)						\
+        {							\
+          fprintf (stderr, "%s:%d: %s: %s\n",			\
+                   __FILE__, __LINE__, gpgme_strsource (error),	\
+		   gpgme_strerror (error));			\
+          exit (1);						\
+        }							\
+    }								\
+  while (0)
 
 //TODO: Function that decrypts/verifies the files found
 //TODO: Function that moves the decrypted files to another directory and encrypts them with fishbowl key
@@ -20,7 +33,7 @@ struct node *search_directory(const char *);
 void add_element(struct node **, char *);
 void traverse_list(struct node *);
 gpgme_ctx_t decrypt_gpg(char *, char *, char *);
-void error_msg(gpgme_error_t, char *);
+//void error_msg(gpgme_error_t, char *);
 
 int main(void) {
   struct node *ptr;
@@ -45,7 +58,7 @@ struct node *search_directory(const char *dir) {
       add_element(&ptr, fileinfo->d_name);
     closedir(dir_fd);
   } else {
-    fprintf(stderr, "Could not open directory.");
+    fprintf(stderr, "Could not open directory: %s.", dir);
   }
   return ptr;
 }
@@ -88,47 +101,49 @@ void traverse_list(struct node *list) {
 
 gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   char buf[BUF_SIZE];
-  //  FILE *fd_in, *fd_out;
+  FILE *fd_in;
   size_t read;
   gpgme_data_t ciphertext, plaintext;
   gpgme_ctx_t ctx;
   gpgme_error_t error;
 
-  //  fd_in = fopen(file, "r");
-  error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
-  if (error == GPG_ERR_NO_ERROR) {
-    gpgme_new(&ctx);
-    gpgme_set_armor(ctx, 1);
-    printf("File: %s\n", file);
-    error = gpgme_data_new_from_file(&ciphertext, file, 1);
-    if (error == GPG_ERR_NO_ERROR) {
-      error = gpgme_data_new(&plaintext);
-      if (error == GPG_ERR_NO_ERROR) {
-	error = gpgme_op_decrypt_verify(ctx, ciphertext, plaintext);
-	if (error == GPG_ERR_NO_ERROR) {
-	  //gpgme_data_release(ciphertext);
-	  //error = gpgme_data_read(plaintext, buf, sizeof(buf), &read);
-	  //if (error == GPG_ERR_NO_ERROR) {
-	  // } else {
-	  //  error_msg(error, "Gpgme_data_read(plaintext, buf, sizeof(buf), &read) failed: ");
-	  // }
-	} else {
-	  error_msg(error, "Gpgme_op_decrypt_verify(ctx, ciphertext, plaintext) failed: ");
-	}
-      } else {
-	error_msg(error, "Gpgme_data_new(&plaintext) failed: ");
-      }
-    } else {
-      error_msg(error, "Gpgme_data_new_from_file(&ciphertext, file, 1) failed: ");
-    }
-  } else {
-    error_msg(error, "Gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir) failed: ");
-  }
-  //  fclose(fd_in);
+  fd_in = fopen(file, "r");
+  //  error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
+  //  if (error == GPG_ERR_NO_ERROR) {
+  init_gpgme(GPGME_PROTOCOL_OpenPGP);
+  gpgme_new(&ctx);
+  gpgme_set_armor(ctx, 1);
+  //    printf("File: %s\n", file);
+  error = gpgme_data_new_from_stream(&ciphertext, fd_in);
+  fail_if_err(error);
+  error = gpgme_data_new(&plaintext);
+  fail_if_err(error);
+  error = gpgme_op_decrypt_verify(ctx, ciphertext, plaintext);
+  fail_if_err(error);
+  //gpgme_data_release(ciphertext);
+  //error = gpgme_data_read(plaintext, buf, sizeof(buf), &read);
+  //fail_if_err(error)
+  // } else {
+  //  error_msg(error, "Gpgme_data_read(plaintext, buf, sizeof(buf), &read) failed: ");
+  // }
+  fclose(fd_in);
+  
   return ctx;
-}
+  }
 
-void error_msg(gpgme_error_t error, char *msg) {
-  fprintf(stderr, "%s%s: %s\n", msg, gpgme_strsource(error), gpgme_strerror(error));
-  exit(1);
+    //void error_msg(gpgme_error_t error, char *msg) {
+    //  fprintf(stderr, "%s%s: %s\n", msg, gpgme_strsource(error), gpgme_strerror(error));
+    //  exit(1);
+    //}
+
+// init_gpgme code taken from t-support.c in the tests/gpg directory of the gpgme tarball
+void init_gpgme (gpgme_protocol_t protocol) {
+  gpgme_error_t error;
+
+  gpgme_check_version (NULL);
+  setlocale (LC_ALL, "");
+  gpgme_set_locale (NULL, LC_CTYPE, setlocale (LC_CTYPE, NULL));
+
+  error = gpgme_engine_check_version (protocol);
+  fail_if_err (error);
 }
