@@ -17,7 +17,7 @@ struct node {
 struct node *search_directory(const char *);
 void add_element(struct node **, char *);
 void traverse_list(struct node *);
-void decrypt_gpg(char *);
+void decrypt_gpg(char *, char *, char *);
 void error_msg(GpgmeError, char *);
 
 int main(void) {
@@ -73,12 +73,12 @@ void traverse_list(struct node *list) {
   while (ptr != NULL) {
     if (ptr->data != NULL)
       printf("Data: %s\n", ptr->data);
-      decrypt_gpg(ptr->data);
+#      decrypt_gpg(ptr->data);
     ptr = ptr->next;
   }
 }
 
-void decrypt_gpg(char *file) {
+void decrypt_gpg(char *file, char *binpath, char *homedir) {
   char buf[];
   FILE *fd_in, *fd_out;
   size_t read;
@@ -87,29 +87,33 @@ void decrypt_gpg(char *file) {
   GpgmeError error;
 
   fd_in = fopen(file, "r");
-  error = gpgme_ctx_set_engine_info(ctx, GPGME_PROTOCOL_OpenPGP
-  gpgme_new(&ctx);
-  gpgme_set_armor(ctx, 1);
-  error = gpgme_data_new_from_fd(&ciphertext, fd_in);
-  if (error == GPGME_No_Error) {
-    error = gpgme_data_new(&plaintext);
+  error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
+  if (error == GPGME_NoError) {
+    gpgme_new(&ctx);
+    gpgme_set_armor(ctx, 1);
+    error = gpgme_data_new_from_fd(&ciphertext, fd_in);
     if (error == GPGME_No_Error) {
-      error = gpgme_op_decrypt(ctx, ciphertext, plaintext);
+      error = gpgme_data_new(&plaintext);
       if (error == GPGME_No_Error) {
-	gpgme_data_release(ciphertext);
-	error = gpgme_data_read(plaintext, buf, sizeof(buf), &read);
+	error = gpgme_op_decrypt_verify(ctx, ciphertext, plaintext);
 	if (error == GPGME_No_Error) {
+	  gpgme_data_release(ciphertext);
+	  error = gpgme_data_read(plaintext, buf, sizeof(buf), &read);
+	  if (error == GPGME_No_Error) {
+	  } else {
+	    error_msg(error, "Gpgme_data_read(plaintext, buf, sizeof(buf), &read) failed: ");
+	  }
 	} else {
-	  error_msg(error, "Gpgme_data_read(plaintext, buf, sizeof(buf), &read) failed: ");
+	  error_msg(error, "Gpgme_op_decrypt_verify(ctx, ciphertext, plaintext) failed: ");
 	}
       } else {
-	error_msg(error, "Gpgme_op_decrypt(ctx, ciphertext, plaintext) falied: ");
+	error_msg(error, "Gpgme_data_new(&plaintext) failed: ");
       }
     } else {
-      error_msg(error, "Gpgme_data_new(&plaintext) failed: ");
+      error_msg(error, "Gpgme_data_new_from_fd(&ciphertext, fd) failed: ");
     }
   } else {
-    error_msg(error, "Gpgme_data_new_from_fd(&ciphertext, fd) failed: ");
+    error_msg(error, "Gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir) failed: ");
   }
   fclose(fd_in);
 }
