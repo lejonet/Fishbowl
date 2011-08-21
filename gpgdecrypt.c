@@ -6,6 +6,8 @@
 #include <dirent.h>
 #include <string.h>
 
+#define BUF_SIZE 4096
+
 //TODO: Function that decrypts/verifies the files found
 //TODO: Function that moves the decrypted files to another directory and encrypts them with fishbowl key
 
@@ -17,8 +19,8 @@ struct node {
 struct node *search_directory(const char *);
 void add_element(struct node **, char *);
 void traverse_list(struct node *);
-void decrypt_gpg(char *, char *, char *);
-void error_msg(GpgmeError, char *);
+gpgme_ctx_t decrypt_gpg(char *, char *, char *);
+void error_msg(gpgme_error_t, char *);
 
 int main(void) {
   struct node *ptr;
@@ -68,41 +70,48 @@ void add_element(struct node **list, char *element) {
 }
 
 void traverse_list(struct node *list) {
+  gpgme_ctx_t ctx;
+  gpgme_verify_result_t verify_result;
+  gpgme_decrypt_result_t decrypt_result;
   struct node *ptr = list;
 
   while (ptr != NULL) {
-    if (ptr->data != NULL)
+    if (ptr->data != NULL) {
       printf("Data: %s\n", ptr->data);
-#      decrypt_gpg(ptr->data);
-    ptr = ptr->next;
+      ctx = decrypt_gpg(ptr->data, "/usr/bin/gpg", "/home/lejonet/.gpg");
+      verify_result = gpgme_op_verify_result(ctx);
+      decrypt_result = gpgme_op_decrypt_result(ctx);
+      ptr = ptr->next;
+    }
   }
 }
 
-void decrypt_gpg(char *file, char *binpath, char *homedir) {
-  char buf[];
-  FILE *fd_in, *fd_out;
+gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
+  char buf[BUF_SIZE];
+  //  FILE *fd_in, *fd_out;
   size_t read;
-  GpgmeData ciphertext, plaintext;
-  GpgmeCtx ctx;
-  GpgmeError error;
+  gpgme_data_t ciphertext, plaintext;
+  gpgme_ctx_t ctx;
+  gpgme_error_t error;
 
-  fd_in = fopen(file, "r");
+  //  fd_in = fopen(file, "r");
   error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
-  if (error == GPGME_NoError) {
+  if (error == GPG_ERR_NO_ERROR) {
     gpgme_new(&ctx);
     gpgme_set_armor(ctx, 1);
-    error = gpgme_data_new_from_fd(&ciphertext, fd_in);
-    if (error == GPGME_No_Error) {
+    printf("File: %s\n", file);
+    error = gpgme_data_new_from_file(&ciphertext, file, 1);
+    if (error == GPG_ERR_NO_ERROR) {
       error = gpgme_data_new(&plaintext);
-      if (error == GPGME_No_Error) {
+      if (error == GPG_ERR_NO_ERROR) {
 	error = gpgme_op_decrypt_verify(ctx, ciphertext, plaintext);
-	if (error == GPGME_No_Error) {
-	  gpgme_data_release(ciphertext);
-	  error = gpgme_data_read(plaintext, buf, sizeof(buf), &read);
-	  if (error == GPGME_No_Error) {
-	  } else {
-	    error_msg(error, "Gpgme_data_read(plaintext, buf, sizeof(buf), &read) failed: ");
-	  }
+	if (error == GPG_ERR_NO_ERROR) {
+	  //gpgme_data_release(ciphertext);
+	  //error = gpgme_data_read(plaintext, buf, sizeof(buf), &read);
+	  //if (error == GPG_ERR_NO_ERROR) {
+	  // } else {
+	  //  error_msg(error, "Gpgme_data_read(plaintext, buf, sizeof(buf), &read) failed: ");
+	  // }
 	} else {
 	  error_msg(error, "Gpgme_op_decrypt_verify(ctx, ciphertext, plaintext) failed: ");
 	}
@@ -110,15 +119,16 @@ void decrypt_gpg(char *file, char *binpath, char *homedir) {
 	error_msg(error, "Gpgme_data_new(&plaintext) failed: ");
       }
     } else {
-      error_msg(error, "Gpgme_data_new_from_fd(&ciphertext, fd) failed: ");
+      error_msg(error, "Gpgme_data_new_from_file(&ciphertext, file, 1) failed: ");
     }
   } else {
     error_msg(error, "Gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir) failed: ");
   }
-  fclose(fd_in);
+  //  fclose(fd_in);
+  return ctx;
 }
 
-void error_msg(GpgmeError error, char *msg) {
-  fprintf(stderr, "%s%s\n", msg, error);
+void error_msg(gpgme_error_t error, char *msg) {
+  fprintf(stderr, "%s%s: %s\n", msg, gpgme_strsource(error), gpgme_strerror(error));
   exit(1);
 }
