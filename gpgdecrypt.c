@@ -109,7 +109,6 @@ gpgme_data_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   init_gpgme(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
   gpgme_new(&ctx);
   gpgme_set_armor(ctx, 1);
-  gpgme_set_passphrase_cb(ctx, passphrase_cb, NULL);
   //    printf("File: %s\n", file);
   error = gpgme_data_new_from_stream(&ciphertext, fd_in);
   fail_if_err(error);
