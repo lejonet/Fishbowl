@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <string.h>
 #include <locale.h>
+#include <errno.h>
 
 #define BUF_SIZE 4096
 // fail_if_err macro borrowed from the t-support.c file in the tests/gpg directory of the gpgme tarball
@@ -32,10 +33,10 @@ struct node {
 struct node *search_directory(const char *);
 void add_element(struct node **, char *);
 void traverse_list(struct node *);
-gpgme_ctx_t decrypt_gpg(char *, char *, char *);
-void init_gpgme(gpgme_protocol_t);
+gpgme_data_t decrypt_gpg(char *, char *, char *);
+void init_gpgme(gpgme_protocol_t, char *, char *);
 gpgme_error_t passphrase_cb(void *, const char *, const char *, int, int);
-//void error_msg(gpgme_error_t, char *);
+void print_gpg_data(gpgme_data_t);
 
 int main(void) {
   struct node *ptr;
@@ -76,7 +77,7 @@ void add_element(struct node **list, char *element) {
     return;
   full_path = malloc(strlen(cwd) + strlen(element) + 3);
   newnode = malloc(sizeof(struct node));
-  sprintf(full_path, "%s/%s", cwd, element);
+  sprintf(full_path, "%s/gpgtest/%s", cwd, element);
   //  printf("Path: %s\n", full_path);
   newnode->data = full_path;
   newnode->next = *list;
@@ -85,24 +86,18 @@ void add_element(struct node **list, char *element) {
 }
 
 void traverse_list(struct node *list) {
-  gpgme_ctx_t ctx;
-  gpgme_verify_result_t verify_result;
-  gpgme_decrypt_result_t decrypt_result;
+  gpgme_data_t gpg_data;
   struct node *ptr = list;
 
-  while (ptr != NULL) {
-    if (ptr->data != NULL) {
+  while (ptr != NULL && ptr->data !=NULL) {
       printf("Data: %s\n", ptr->data);
-      ctx = decrypt_gpg(ptr->data, "/usr/bin/gpg", "/home/lejonet/.gnupg");
-      verify_result = gpgme_op_verify_result(ctx);
-      decrypt_result = gpgme_op_decrypt_result(ctx);
+      gpg_data = decrypt_gpg(ptr->data, "/usr/bin/gpg", ".gnupg");
+      print_gpg_data(gpg_data);
       ptr = ptr->next;
-    }
   }
 }
 
-gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
-  char buf[BUF_SIZE];
+gpgme_data_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   FILE *fd_in;
   size_t read;
   gpgme_data_t ciphertext, plaintext;
@@ -110,11 +105,10 @@ gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   gpgme_error_t error;
 
   fd_in = fopen(file, "rb");
-  //  error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
-  //  if (error == GPG_ERR_NO_ERROR) {
-  init_gpgme(GPGME_PROTOCOL_OpenPGP);
+  init_gpgme(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
   gpgme_new(&ctx);
   gpgme_set_armor(ctx, 1);
+  gpgme_set_passphrase_cb(ctx, passphrase_cb, NULL);
   //    printf("File: %s\n", file);
   error = gpgme_data_new_from_stream(&ciphertext, fd_in);
   fail_if_err(error);
@@ -122,35 +116,25 @@ gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   fail_if_err(error);
   error = gpgme_op_decrypt_verify(ctx, ciphertext, plaintext);
   fail_if_err(error);
-  //gpgme_data_release(ciphertext);
-  //error = gpgme_data_read(plaintext, buf, sizeof(buf), &read);
-  //fail_if_err(error)
-  // } else {
-  //  error_msg(error, "Gpgme_data_read(plaintext, buf, sizeof(buf), &read) failed: ");
-  // }
   gpgme_data_release(ciphertext);
-  gpgme_data_release(plaintext);
   gpgme_release(ctx);
   fclose(fd_in);
   
-  return ctx;
+  return plaintext;
   }
 
-    //void error_msg(gpgme_error_t error, char *msg) {
-    //  fprintf(stderr, "%s%s: %s\n", msg, gpgme_strsource(error), gpgme_strerror(error));
-    //  exit(1);
-    //}
-
 // init_gpgme code borrowed from t-support.c in the tests/gpg directory of the gpgme tarball
-void init_gpgme (gpgme_protocol_t protocol) {
+void init_gpgme (gpgme_protocol_t protocol, char *binpath, char *homedir) {
   gpgme_error_t error;
 
   gpgme_check_version (NULL);
   setlocale (LC_ALL, "");
-  gpgme_set_locale (NULL, LC_CTYPE, setlocale (LC_CTYPE, NULL));
+  gpgme_set_locale (NULL, LC_CTYPE, setlocale(LC_CTYPE, NULL));
 
-  error = gpgme_engine_check_version (protocol);
-  fail_if_err (error);
+  error = gpgme_engine_check_version(protocol);
+  fail_if_err(error);
+  error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
+  fail_if_err(error);
 }
 
 gpgme_error_t passphrase_cb(void *opaque, const char *uid_hint, const char *passphrase_info, int last_was_bad, int fd) {
@@ -171,6 +155,25 @@ gpgme_error_t passphrase_cb(void *opaque, const char *uid_hint, const char *pass
   if (res == passlength) {
     return 0;
   } else {
-    return 1;
+    return gpgme_err_code_from_errno(errno);
   }
+}
+
+void print_gpg_data(gpgme_data_t data) {
+  char buf[BUF_SIZE+1];
+  int res;
+
+  res = gpgme_data_seek(data, 0, SEEK_SET);
+
+  if (res) {
+    fprintf(stderr, "Mayday! Mayday! Printing is going down! I repeat, printing is...*static noise*");
+    fail_if_err(gpgme_err_code_from_errno(errno));
+  }
+  
+  while ((res = gpgme_data_read(data, buf, BUF_SIZE)) > 0) {
+    fwrite(buf, res, 1, stdout);
+  }
+
+  if (res < 0)
+    fail_if_err(gpgme_err_code_from_errno(errno));
 }
