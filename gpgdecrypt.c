@@ -154,18 +154,18 @@ void init_gpgme (gpgme_protocol_t protocol) {
 }
 
 gpgme_error_t passphrase_cb(void *opaque, const char *uid_hint, const char *passphrase_info, int last_was_bad, int fd) {
-  char *password = ;
+  char *password = "" ;
   int res, offset = 0, passlength = strlen(password);
 
   do {
-    res = write(fd, &pass[off], passlen-off);
+    res = write(fd, &password[offset], passlength-offset);
     if (res > 0)
-      off += res;
-  } while ( res > 0 && res != passlen);
+      offset += res;
+  } while ( res > 0 && res != passlength);
 
-  if (res == passlen) {
-    return 0
+  if (res == passlength) {
+    return 0;
   } else {
-    return gpgme_error_from_errno(errno);
+    return 1;
   }
 }
