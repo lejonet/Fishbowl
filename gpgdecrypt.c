@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <string.h>
 #include <locale.h>
+#include <errno.h>
 
 #define BUF_SIZE 4096
 // fail_if_err macro borrowed from the t-support.c file in the tests/gpg directory of the gpgme tarball
@@ -35,6 +36,7 @@ void traverse_list(struct node *);
 gpgme_ctx_t decrypt_gpg(char *, char *, char *);
 void init_gpgme(gpgme_protocol_t);
 gpgme_error_t passphrase_cb(void *, const char *, const char *, int, int);
+void print_gpg_data(gpgme_data_t);
 //void error_msg(gpgme_error_t, char *);
 
 int main(void) {
@@ -76,33 +78,30 @@ void add_element(struct node **list, char *element) {
     return;
   full_path = malloc(strlen(cwd) + strlen(element) + 3);
   newnode = malloc(sizeof(struct node));
-  sprintf(full_path, "%s/%s", cwd, element);
+  sprintf(full_path, "%s/gpgtest/%s", cwd, element);
   //  printf("Path: %s\n", full_path);
   newnode->data = full_path;
   newnode->next = *list;
   *list = newnode;
   //  printf("Data: %s\n", newnode->data);
 }
-
+pp
 void traverse_list(struct node *list) {
   gpgme_ctx_t ctx;
   gpgme_verify_result_t verify_result;
   gpgme_decrypt_result_t decrypt_result;
   struct node *ptr = list;
 
-  while (ptr != NULL) {
-    if (ptr->data != NULL) {
+  while (ptr != NULL && ptr->data !=NULL) {
       printf("Data: %s\n", ptr->data);
-      ctx = decrypt_gpg(ptr->data, "/usr/bin/gpg", "/home/lejonet/.gnupg");
+      ctx = decrypt_gpg(ptr->data, "/usr/bin/gpg", "./.gnupg");
       verify_result = gpgme_op_verify_result(ctx);
       decrypt_result = gpgme_op_decrypt_result(ctx);
       ptr = ptr->next;
-    }
   }
 }
 
 gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
-  char buf[BUF_SIZE];
   FILE *fd_in;
   size_t read;
   gpgme_data_t ciphertext, plaintext;
@@ -115,6 +114,7 @@ gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   init_gpgme(GPGME_PROTOCOL_OpenPGP);
   gpgme_new(&ctx);
   gpgme_set_armor(ctx, 1);
+  gpgme_set_passphrase_cb(ctx, passphrase_cb, NULL);
   //    printf("File: %s\n", file);
   error = gpgme_data_new_from_stream(&ciphertext, fd_in);
   fail_if_err(error);
@@ -171,6 +171,25 @@ gpgme_error_t passphrase_cb(void *opaque, const char *uid_hint, const char *pass
   if (res == passlength) {
     return 0;
   } else {
-    return 1;
+    return gpgme_err_code_from_errno(errno);
   }
+}
+
+void print_gpg_data(gpgme_data_t data) {
+  char buf[BUF_SIZE+1];
+  int res;
+
+  res = gpgme_data_seek(data, 0, SEEK_SET);
+
+  if (res) {
+    fprintf(stderr, "Mayday! Mayday! Printing is going down! I repeat, printing is...*static noise*");
+    fail_if_error(gpgme_err_code_from_errno(errno));
+  }
+  
+  while ((res = gpgme_data_read(data, buf, BUF_SIZE)) > 0) {
+    fwrite(buf, res, 1, stdout);
+  }
+
+  if (res < 0)
+    fail_if_error(gpgme_err_code_from_errno(errno));
 }
