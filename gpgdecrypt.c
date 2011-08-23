@@ -5,6 +5,7 @@
 #include <gpgme.h>
 #include <dirent.h>
 #include <string.h>
+#include <locale.h>
 
 #define BUF_SIZE 4096
 // fail_if_err macro borrowed from the t-support.c file in the tests/gpg directory of the gpgme tarball
@@ -21,8 +22,7 @@
     }								\
   while (0)
 
-//TODO: Function that decrypts/verifies the files found
-//TODO: Function that moves the decrypted files to another directory and encrypts them with fishbowl key
+//TODO: Function that encrypts the files with the fishbowl key and then moves them to another directory
 
 struct node {
   char *data;
@@ -33,6 +33,8 @@ struct node *search_directory(const char *);
 void add_element(struct node **, char *);
 void traverse_list(struct node *);
 gpgme_ctx_t decrypt_gpg(char *, char *, char *);
+void init_gpgme(gpgme_protocol_t);
+gpgme_error_t passphrase_cb(void *, const char *, const char *, int, int);
 //void error_msg(gpgme_error_t, char *);
 
 int main(void) {
@@ -91,7 +93,7 @@ void traverse_list(struct node *list) {
   while (ptr != NULL) {
     if (ptr->data != NULL) {
       printf("Data: %s\n", ptr->data);
-      ctx = decrypt_gpg(ptr->data, "/usr/bin/gpg", "/home/lejonet/.gpg");
+      ctx = decrypt_gpg(ptr->data, "/usr/bin/gpg", "/home/lejonet/.gnupg");
       verify_result = gpgme_op_verify_result(ctx);
       decrypt_result = gpgme_op_decrypt_result(ctx);
       ptr = ptr->next;
@@ -126,6 +128,9 @@ gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   // } else {
   //  error_msg(error, "Gpgme_data_read(plaintext, buf, sizeof(buf), &read) failed: ");
   // }
+  gpgme_data_release(ciphertext);
+  gpgme_data_release(plaintext);
+  gpgme_release(ctx);
   fclose(fd_in);
   
   return ctx;
@@ -136,7 +141,7 @@ gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
     //  exit(1);
     //}
 
-// init_gpgme code taken from t-support.c in the tests/gpg directory of the gpgme tarball
+// init_gpgme code borrowed from t-support.c in the tests/gpg directory of the gpgme tarball
 void init_gpgme (gpgme_protocol_t protocol) {
   gpgme_error_t error;
 
@@ -146,4 +151,21 @@ void init_gpgme (gpgme_protocol_t protocol) {
 
   error = gpgme_engine_check_version (protocol);
   fail_if_err (error);
+}
+
+gpgme_error_t passphrase_cb(void *opaque, const char *uid_hint, const char *passphrase_info, int last_was_bad, int fd) {
+  char *password = ;
+  int res, offset = 0, passlength = strlen(password);
+
+  do {
+    res = write(fd, &pass[off], passlen-off);
+    if (res > 0)
+      off += res;
+  } while ( res > 0 && res != passlen);
+
+  if (res == passlen) {
+    return 0
+  } else {
+    return gpgme_error_from_errno(errno);
+  }
 }
