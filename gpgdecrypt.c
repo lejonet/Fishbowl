@@ -84,7 +84,7 @@ void add_element(struct node **list, char *element) {
   *list = newnode;
   //  printf("Data: %s\n", newnode->data);
 }
-pp
+
 void traverse_list(struct node *list) {
   gpgme_data_t gpg_data;
   struct node *ptr = list;
@@ -122,7 +122,7 @@ gpgme_data_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   fclose(fd_in);
   
   return plaintext;
-  }
+}
 
 // init_gpgme code borrowed from t-support.c in the tests/gpg directory of the gpgme tarball
 void init_gpgme (gpgme_protocol_t protocol, char *binpath, char *homedir) {
@@ -168,13 +168,13 @@ void print_gpg_data(gpgme_data_t data) {
 
   if (res) {
     fprintf(stderr, "Mayday! Mayday! Printing is going down! I repeat, printing is...*static noise*");
-    fail_if_error(gpgme_err_code_from_errno(errno));
+    fail_if_err(gpgme_err_code_from_errno(errno));
   }
-  
+  printf("Decrypted data: ");
   while ((res = gpgme_data_read(data, buf, BUF_SIZE)) > 0) {
     fwrite(buf, res, 1, stdout);
   }
 
   if (res < 0)
-    fail_if_error(gpgme_err_code_from_errno(errno));
+    fail_if_err(gpgme_err_code_from_errno(errno));
 }
