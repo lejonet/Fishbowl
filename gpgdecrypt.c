@@ -138,28 +138,6 @@ void init_gpgme (gpgme_protocol_t protocol, char *binpath, char *homedir) {
   fail_if_err(error);
 }
 
-gpgme_error_t passphrase_cb(void *opaque, const char *uid_hint, const char *passphrase_info, int last_was_bad, int fd) {
-  char *password = "" ;
-  int res, offset = 0, passlength = strlen(password);
-  
-  printf("Password: %s", password);
-  printf("Passlength: %d\n", passlength);
-  do {
-    res = write(fd, &password[offset], passlength-offset);
-    printf("res: %d\n", res);
-    if (res > 0) {
-      offset += res;
-      printf("offset: %d\n", offset);
-    }
-  } while ( res > 0 && res != passlength);
-
-  if (res == passlength) {
-    return 0;
-  } else {
-    return gpgme_err_code_from_errno(errno);
-  }
-}
-
 void print_gpg_data(gpgme_data_t data) {
   char buf[BUF_SIZE+1];
   int res;
