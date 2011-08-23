@@ -109,7 +109,7 @@ gpgme_ctx_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   gpgme_ctx_t ctx;
   gpgme_error_t error;
 
-  fd_in = fopen(file, "r");
+  fd_in = fopen(file, "rb");
   //  error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
   //  if (error == GPG_ERR_NO_ERROR) {
   init_gpgme(GPGME_PROTOCOL_OpenPGP);
@@ -156,11 +156,16 @@ void init_gpgme (gpgme_protocol_t protocol) {
 gpgme_error_t passphrase_cb(void *opaque, const char *uid_hint, const char *passphrase_info, int last_was_bad, int fd) {
   char *password = "" ;
   int res, offset = 0, passlength = strlen(password);
-
+  
+  printf("Password: %s", password);
+  printf("Passlength: %d\n", passlength);
   do {
     res = write(fd, &password[offset], passlength-offset);
-    if (res > 0)
+    printf("res: %d\n", res);
+    if (res > 0) {
       offset += res;
+      printf("offset: %d\n", offset);
+    }
   } while ( res > 0 && res != passlength);
 
   if (res == passlength) {
