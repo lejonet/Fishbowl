@@ -27,7 +27,7 @@
 
 #define BUF_SIZE 4096
 // fail_if_err macro borrowed from the t-support.c file in the tests/gpg directory of the gpgme tarball
-#define fail_if_err(error)					\
+#define fail_if_error(error)					\
   do								\
     {								\
       if (error)						\
@@ -52,7 +52,6 @@ void add_element(struct node **, char *);
 void traverse_list(struct node *);
 gpgme_data_t decrypt_gpg(char *, char *, char *);
 void init_gpgme(gpgme_protocol_t, char *, char *);
-gpgme_error_t passphrase_cb(void *, const char *, const char *, int, int);
 void print_gpg_data(gpgme_data_t);
 
 int main(void) {
@@ -128,11 +127,11 @@ gpgme_data_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   gpgme_set_armor(ctx, 1);
   //    printf("File: %s\n", file);
   error = gpgme_data_new_from_stream(&ciphertext, fd_in);
-  fail_if_err(error);
+  fail_if_error(error);
   error = gpgme_data_new(&plaintext);
-  fail_if_err(error);
+  fail_if_error(error);
   error = gpgme_op_decrypt_verify(ctx, ciphertext, plaintext);
-  fail_if_err(error);
+  fail_if_error(error);
   gpgme_data_release(ciphertext);
   gpgme_release(ctx);
   fclose(fd_in);
@@ -140,7 +139,7 @@ gpgme_data_t decrypt_gpg(char *file, char *binpath, char *homedir) {
   return plaintext;
 }
 
-// init_gpgme code borrowed from t-support.c in the tests/gpg directory of the gpgme tarball
+// init_gpgme code borrowed from t-support.c in the tests/gpg directory of the gpgme tarball with some own additions
 void init_gpgme (gpgme_protocol_t protocol, char *binpath, char *homedir) {
   gpgme_error_t error;
 
@@ -149,11 +148,12 @@ void init_gpgme (gpgme_protocol_t protocol, char *binpath, char *homedir) {
   gpgme_set_locale (NULL, LC_CTYPE, setlocale(LC_CTYPE, NULL));
 
   error = gpgme_engine_check_version(protocol);
-  fail_if_err(error);
+  fail_if_error(error);
   error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
-  fail_if_err(error);
+  fail_if_error(error);
 }
 
+// Code borrowed from the print_data function in t-support.h of the gpgme-tarball with some own additions
 void print_gpg_data(gpgme_data_t data) {
   char buf[BUF_SIZE+1];
   int res;
@@ -161,7 +161,7 @@ void print_gpg_data(gpgme_data_t data) {
   res = gpgme_data_seek(data, 0, SEEK_SET);
 
   if (res) {
-    fprintf(stderr, "Mayday! Mayday! Printing is going down! I repeat, printing is...*static noise*");
+    fprintf(stderr, "Mayday! Mayday! Data search is going down! I repeat, data search is...*static noise*");
     fail_if_err(gpgme_err_code_from_errno(errno));
   }
   printf("Decrypted data: ");
