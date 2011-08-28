@@ -47,10 +47,16 @@ struct node {
   struct node *next;
 };
 
+struct gpg_data {
+  gpgme_data_t data;
+  gpgme_ctx_t ctx;
+};
+
 struct node *search_directory(const char *);
 void add_element(struct node **, char *);
 void traverse_list(struct node *);
-gpgme_data_t decrypt_gpg(char *, char *, char *);
+struct gpg_data *decrypt_gpg(char *, char *, char *);
+// gpgme_data_t encrypt_gpg(gpgme_data_t, char *, char *);
 void init_gpgme(gpgme_protocol_t, char *, char *);
 void print_gpg_data(gpgme_data_t);
 
@@ -102,42 +108,50 @@ void add_element(struct node **list, char *element) {
 }
 
 void traverse_list(struct node *list) {
-  gpgme_data_t gpg_data;
+  struct gpg_data *gpg_outdata;
   struct node *ptr = list;
 
   while (ptr != NULL && ptr->data !=NULL) {
       printf("Data: %s\n", ptr->data);
-      gpg_data = decrypt_gpg(ptr->data, "/usr/bin/gpg", ".gnupg");
-      print_gpg_data(gpg_data);
+      gpg_outdata = decrypt_gpg(ptr->data, "/usr/bin/gpg", ".gnupg");
+      print_gpg_data(gpg_outdata->data);
       ptr = ptr->next;
   }
 }
 
 
-gpgme_data_t decrypt_gpg(char *file, char *binpath, char *homedir) {
+struct gpg_data *decrypt_gpg(char *file, char *binpath, char *homedir) {
   FILE *fd_in;
-  size_t read;
-  gpgme_data_t ciphertext, plaintext;
-  gpgme_ctx_t ctx;
+  gpgme_data_t ciphertext;
   gpgme_error_t error;
+  struct gpg_data *outdata = malloc(sizeof(struct gpg_data));
 
   fd_in = fopen(file, "rb");
   init_gpgme(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
-  gpgme_new(&ctx);
-  gpgme_set_armor(ctx, 1);
+  gpgme_new(&outdata->ctx);
+  gpgme_set_armor(outdata->ctx, 1);
   //    printf("File: %s\n", file);
   error = gpgme_data_new_from_stream(&ciphertext, fd_in);
   fail_if_error(error);
-  error = gpgme_data_new(&plaintext);
+  error = gpgme_data_new(&outdata->data);
   fail_if_error(error);
-  error = gpgme_op_decrypt_verify(ctx, ciphertext, plaintext);
+  error = gpgme_op_decrypt_verify(outdata->ctx, ciphertext, outdata->data);
   fail_if_error(error);
   gpgme_data_release(ciphertext);
-  gpgme_release(ctx);
   fclose(fd_in);
   
-  return plaintext;
+  return outdata;
 }
+
+//gpgme_data_t encrypt_gpg(gpgme_data_t *plaintext, char *binpath, char *homedir) {
+//  FILE *fd_out;
+//  gpgme_ctx_t ctx;
+//  gpgme_error_t error;
+//
+//  init_gpgme(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
+//  gpgme_new(&ctx);
+//  gpgme_set_armor(ctx, 1);
+//}
 
 // init_gpgme code borrowed from t-support.c in the tests/gpg directory of the gpgme tarball with some own additions
 void init_gpgme (gpgme_protocol_t protocol, char *binpath, char *homedir) {
@@ -162,7 +176,7 @@ void print_gpg_data(gpgme_data_t data) {
 
   if (res) {
     fprintf(stderr, "Mayday! Mayday! Data search is going down! I repeat, data search is...*static noise*");
-    fail_if_err(gpgme_err_code_from_errno(errno));
+    fail_if_error(gpgme_err_code_from_errno(errno));
   }
   printf("Decrypted data: ");
   while ((res = gpgme_data_read(data, buf, BUF_SIZE)) > 0) {
@@ -170,5 +184,5 @@ void print_gpg_data(gpgme_data_t data) {
   }
 
   if (res < 0)
-    fail_if_err(gpgme_err_code_from_errno(errno));
+    fail_if_error(gpgme_err_code_from_errno(errno));
 }
