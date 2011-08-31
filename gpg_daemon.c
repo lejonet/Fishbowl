@@ -28,17 +28,15 @@
 #define BUF_SIZE 4096
 // fail_if_err macro borrowed from the t-support.c file in the tests/gpg directory of the gpgme tarball
 #define fail_if_error(error)					\
-  do								\
-    {								\
-      if (error)						\
-        {							\
+  do {								\
+    if (error) {						\
           fprintf (stderr, "%s:%d: %s: %s\n",			\
-                   __FILE__, __LINE__, gpgme_strsource (error),	\
-		   gpgme_strerror (error));			\
-          exit (1);						\
-        }							\
+                   __FILE__, __LINE__, gpgme_strsource(error),	\
+		   gpgme_strerror(error));			\
+          exit(1);						\
     }								\
-  while (0)
+  } while(0)							\
+
 
 //TODO: Function that encrypts the files with the fishbowl key and then moves them to another directory
 
@@ -58,7 +56,8 @@ void traverse_list(struct node *);
 struct gpg_data *decrypt_gpg(char *, char *, char *);
 // gpgme_data_t encrypt_gpg(gpgme_data_t, char *, char *);
 void init_gpgme(gpgme_protocol_t, char *, char *);
-void print_gpg_data(gpgme_data_t);
+void print_gpg_decrypt_data(gpgme_data_t);
+void print_gpg_verify_data(gpgme_verify_result_t);
 
 int main(void) {
   struct node *ptr;
@@ -110,11 +109,14 @@ void add_element(struct node **list, char *element) {
 void traverse_list(struct node *list) {
   struct gpg_data *gpg_outdata;
   struct node *ptr = list;
+  gpgme_verify_result_t verification;
 
   while (ptr != NULL && ptr->data !=NULL) {
       printf("Data: %s\n", ptr->data);
       gpg_outdata = decrypt_gpg(ptr->data, "/usr/bin/gpg", ".gnupg");
-      print_gpg_data(gpg_outdata->data);
+      print_gpg_decrypt_data(gpg_outdata->data);
+      verification = gpgme_op_verify_result(gpg_outdata->ctx);
+      print_gpg_verify_data(verification);
       ptr = ptr->next;
   }
 }
@@ -168,7 +170,7 @@ void init_gpgme (gpgme_protocol_t protocol, char *binpath, char *homedir) {
 }
 
 // Code borrowed from the print_data function in t-support.h of the gpgme-tarball with some own additions
-void print_gpg_data(gpgme_data_t data) {
+void print_gpg_decrypt_data(gpgme_data_t data) {
   char buf[BUF_SIZE+1];
   int res;
 
@@ -185,4 +187,32 @@ void print_gpg_data(gpgme_data_t data) {
 
   if (res < 0)
     fail_if_error(gpgme_err_code_from_errno(errno));
+}
+
+void print_gpg_verify_data(gpgme_verify_result_t indata) {
+  gpgme_signature_t data = indata->signatures;
+    if (data)
+    {
+      if (data->summary)
+	{ 
+	  printf("Summary: 0x%x\n", data->summary);
+	}
+      if (data->fpr)
+	{
+	  printf("Fingerprint: %s\n", data->fpr);
+	}
+      printf("Status: %s\n", gpgme_strerror(data->status));
+      if (data->wrong_key_usage)
+	{
+	  printf("Key_usage: %d\n", data->wrong_key_usage);
+	}
+      if (data->validity)
+	{
+	  printf("Validity: %i\n", data->validity);
+	}
+      if (data->validity_reason)
+	{
+	  printf("Validity reason: %s\n", gpgme_strerror(data->validity_reason));
+	}
+    }
 }
