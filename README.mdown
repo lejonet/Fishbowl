@@ -6,7 +6,7 @@ This daemon's purpose is to watch a directory for files and when it find files i
 
 ## Parts used in the project
 I have used the [gpgme library] [1] for the gpg interaction parts and system related stuff from linux like errno.h, dirent.h and string.h
-[1] http://www.gnupg.org/gpgme.html "GPGME library homepage"
+[1]: http://www.gnupg.org/gpgme.html "GPGME library homepage"
 
 ## License
 I am releasing everything under the GPLv2 license, copy it, share it, use it and do it with happiness and motivation to help people.
