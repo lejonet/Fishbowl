@@ -48,7 +48,7 @@ struct node {
 };
 
 struct gpg_data {
-  gpgme_data_t data;
+  gpgme_data_t plain, cipher;
   gpgme_ctx_t ctx;
 };
 
@@ -56,10 +56,11 @@ struct node *search_directory(const char *);
 void add_element(struct node **, char *);
 void traverse_list(struct node *);
 struct gpg_data *decrypt_gpg(char *, char *, char *);
-struct gpg_data *encrypt_gpg(struct gpg_data *, char *, char *);
+void encrypt_gpg(struct gpg_data *, char *, char *);
 void init_gpgme(gpgme_protocol_t, char *, char *);
 void print_gpg_decrypt_data(gpgme_data_t);
-void print_gpg_verify_data(gpgme_ctx_t);
+void print_gpg_verify_data(gpgme_verify_result_t);
+void print_gpg_sign_data(gpgme_sign_result_t);
 
 int main(void) {
   struct node *ptr;
@@ -109,13 +110,39 @@ void add_element(struct node **list, char *element) {
 }
 
 void traverse_list(struct node *list) {
+  FILE *out;
+  char *outfile = "./gpgtest/new_", *extension;
+  int count = 1;
   struct gpg_data *gpg_outdata;
   struct node *ptr = list;
+  gpgme_verify_result_t verify_result;
+  gpgme_encrypt_result_t encrypt_result;
+  gpgme_sign_result_t sign_result;
 
   while (ptr != NULL && ptr->data !=NULL) {
       printf("Data: %s\n", ptr->data);
+
       gpg_outdata = decrypt_gpg(ptr->data, "/usr/bin/gpg", ".gnupg");
-      print_gpg_decrypt_data(gpg_outdata->data);
+      print_gpg_decrypt_data(gpg_outdata->plain);
+      verify_result = gpgme_op_verify_result(gpg_outdata->ctx);
+      print_gpg_verify_data(verify_result);
+
+      encrypt_gpg(gpg_outdata, "/usr/bin/gpg", ".gnupg");
+      encrypt_result = gpgme_op_encrypt_result(gpg_outdata->ctx);
+      if (encrypt_result->invalid_recipients) {
+	fprintf(stderr, "Invalid recipients detected: %s\n", encrypt_result->invalid_recipients->fpr);
+	exit(1);
+      }
+      sign_result = gpgme_op_sign_result(gpg_outdata->ctx);
+      print_gpg_sign_data(sign_result);
+      sprintf(extension, "%d%s", count, ".gpg");
+      strncat(outfile, extension, strlen(extension));
+      printf("Outfile: %s\n", outfile);
+
+      out = fopen(outfile, "wb");
+      fwrite(gpg_outdata->cipher, sizeof(gpg_outdata->cipher), 1, out);
+      fclose(out);
+      count++;
       ptr = ptr->next;
   }
 }
@@ -134,9 +161,9 @@ struct gpg_data *decrypt_gpg(char *file, char *binpath, char *homedir) {
   //    printf("File: %s\n", file);
   error = gpgme_data_new_from_stream(&ciphertext, fd_in);
   fail_if_error(error);
-  error = gpgme_data_new(&outdata->data);
+  error = gpgme_data_new(&outdata->plain);
   fail_if_error(error);
-  error = gpgme_op_decrypt_verify(outdata->ctx, ciphertext, outdata->data);
+  error = gpgme_op_decrypt_verify(outdata->ctx, ciphertext, outdata->plain);
   fail_if_error(error);
   gpgme_data_release(ciphertext);
   fclose(fd_in);
@@ -144,12 +171,20 @@ struct gpg_data *decrypt_gpg(char *file, char *binpath, char *homedir) {
   return outdata;
 }
 
-struct gpg_data *encrypt_gpg(struct gpg_data *indata, char *binpath, char *homedir) {
+void encrypt_gpg(struct gpg_data *indata, char *binpath, char *homedir) {
   gpgme_error_t error;
+  gpgme_key_t recipient[2] = {NULL, NULL};
 
   init_gpgme(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
-  gpgme_new(&indata->ctx);
-  gpgme_set_armor(indata->ctx, 1);
+  //  gpgme_new(&indata->ctx);
+  //  gpgme_set_armor(indata->ctx, 1);
+  error = gpgme_data_new(&indata->cipher);
+  fail_if_error(error);
+  error = gpgme_get_key(indata->ctx, "D09AFF79", &recipient[0], 0);
+  fail_if_error(error);
+  error = gpgme_op_encrypt_sign(indata->ctx, recipient, GPGME_ENCRYPT_ALWAYS_TRUST, indata->plain, indata->cipher);
+  fail_if_error(error);
+  gpgme_key_unref(recipient[0]);
 }
 
 // init_gpgme code borrowed from t-support.c in the tests/gpg directory of the gpgme tarball with some own additions
@@ -186,8 +221,17 @@ void print_gpg_decrypt_data(gpgme_data_t data) {
     fail_if_error(gpgme_err_code_from_errno(errno));
 }
 
-void print_gpg_verify_data(gpgme_ctx_t ctx) {
+void print_gpg_verify_data(gpgme_verify_result_t data) {
   gpgme_signature_t signature;
   
-  signature = gpgme_op_verify_result(
+  signature = data->signatures;
+  printf("Fingerprint: %s\n", signature->fpr);
+  printf("Status: %s\n", gpgme_strerror(signature->status));  
+}
+
+void print_gpg_sign_data(gpgme_sign_result_t data) {
+  printf("Fingerprint: %s\n", data->signatures->fpr);
+  printf("Hash algorithm: %i\n", data->signatures->hash_algo);
+  printf("Pubkey algorithm: %i\n", data->signatures->pubkey_algo);
+  printf("Type: %i\n", data->signatures->type);
 }
