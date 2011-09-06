@@ -1,5 +1,5 @@
 /*
- Fishbowl daemon - A small daemon to fetch, decrypt and verify, encrypt and move the files that arrives
+ Fishbowl daemon - A small daemon to fetch, decrypt, verify, encrypt, sign and move the files that arrives in a folder
  Copyright (C) 2011 Daniel Kuehn <daniel@kuehn.se>
  
  This program is free software; you can redistribute it and/or modify
@@ -101,7 +101,7 @@ void add_element(struct node **list, char *element) {
     return;
   full_path = malloc(strlen(cwd) + strlen(element) + 3);
   newnode = malloc(sizeof(struct node));
-  sprintf(full_path, "%s/gpgtest/%s", cwd, element);
+  snprintf(full_path, strlen(cwd)+strlen(element)+10, "%s/gpgtest/%s", cwd, element);
   //  printf("Path: %s\n", full_path);
   newnode->data = full_path;
   newnode->next = *list;
@@ -110,14 +110,16 @@ void add_element(struct node **list, char *element) {
 }
 
 void traverse_list(struct node *list) {
+    // Todo: Refactor this code into more sensible functions
   FILE *out;
-  char *outfile = "./gpgtest/new_", *extension;
+  char *result_file = malloc(sizeof(char)*(26));
   int count = 1;
   struct gpg_data *gpg_outdata;
   struct node *ptr = list;
   gpgme_verify_result_t verify_result;
   gpgme_encrypt_result_t encrypt_result;
   gpgme_sign_result_t sign_result;
+  gpgme_error_t error;
 
   while (ptr != NULL && ptr->data !=NULL) {
       printf("Data: %s\n", ptr->data);
@@ -135,12 +137,13 @@ void traverse_list(struct node *list) {
       }
       sign_result = gpgme_op_sign_result(gpg_outdata->ctx);
       print_gpg_sign_data(sign_result);
-      sprintf(extension, "%d%s", count, ".gpg");
-      strncat(outfile, extension, strlen(extension));
-      printf("Outfile: %s\n", outfile);
-
-      out = fopen(outfile, "wb");
-      fwrite(gpg_outdata->cipher, sizeof(gpg_outdata->cipher), 1, out);
+      //      printf("Stuff to put into result_file: %s%d.%s\n", beginning, count, extension);
+      snprintf(result_file, 26, "./gpgtest/new_%d.gpg", count);
+      printf("Outfile: %s\n", result_file);
+      out = fopen(result_file, "wb");
+      //      fwrite(gpg_outdata->cipher, sizeof(gpg_outdata->cipher), 1, out);
+      error = gpgme_data_new_from_stream(&gpg_outdata->cipher, out);
+      fail_if_error(error);
       fclose(out);
       count++;
       ptr = ptr->next;
@@ -225,13 +228,15 @@ void print_gpg_verify_data(gpgme_verify_result_t data) {
   gpgme_signature_t signature;
   
   signature = data->signatures;
+  printf("Verification data: \n");
   printf("Fingerprint: %s\n", signature->fpr);
   printf("Status: %s\n", gpgme_strerror(signature->status));  
 }
 
 void print_gpg_sign_data(gpgme_sign_result_t data) {
+  printf("Signing data: \n");
   printf("Fingerprint: %s\n", data->signatures->fpr);
   printf("Hash algorithm: %i\n", data->signatures->hash_algo);
   printf("Pubkey algorithm: %i\n", data->signatures->pubkey_algo);
-  printf("Type: %i\n", data->signatures->type);
+  printf("Type: %i Expected: %i\n", data->signatures->type, GPGME_SIG_MODE_NORMAL);
 }
