@@ -61,6 +61,7 @@ void init_gpgme(gpgme_protocol_t, char *, char *);
 void print_gpg_decrypt_data(gpgme_data_t);
 void print_gpg_verify_data(gpgme_verify_result_t);
 void print_gpg_sign_data(gpgme_sign_result_t);
+void write_to_file(struct gpg_data *, char *);
 
 int main(void) {
   struct node *ptr;
@@ -137,14 +138,9 @@ void traverse_list(struct node *list) {
       }
       sign_result = gpgme_op_sign_result(gpg_outdata->ctx);
       print_gpg_sign_data(sign_result);
-      //      printf("Stuff to put into result_file: %s%d.%s\n", beginning, count, extension);
       snprintf(result_file, 26, "./gpgtest/new_%d.gpg", count);
       printf("Outfile: %s\n", result_file);
-      out = fopen(result_file, "wb");
-      //      fwrite(gpg_outdata->cipher, sizeof(gpg_outdata->cipher), 1, out);
-      error = gpgme_data_new_from_stream(&gpg_outdata->cipher, out);
-      fail_if_error(error);
-      fclose(out);
+      write_to_file(gpg_outdata, result_file);
       count++;
       ptr = ptr->next;
   }
@@ -157,7 +153,7 @@ struct gpg_data *decrypt_gpg(char *file, char *binpath, char *homedir) {
   gpgme_error_t error;
   struct gpg_data *outdata = malloc(sizeof(struct gpg_data));
 
-  fd_in = fopen(file, "rb");
+  fd_in = fopen(file, "r");
   init_gpgme(GPGME_PROTOCOL_OpenPGP, binpath, homedir);
   gpgme_new(&outdata->ctx);
   gpgme_set_armor(outdata->ctx, 1);
@@ -239,4 +235,28 @@ void print_gpg_sign_data(gpgme_sign_result_t data) {
   printf("Hash algorithm: %i\n", data->signatures->hash_algo);
   printf("Pubkey algorithm: %i\n", data->signatures->pubkey_algo);
   printf("Type: %i Expected: %i\n", data->signatures->type, GPGME_SIG_MODE_NORMAL);
+}
+
+
+void write_to_file(struct gpg_data *outdata, char *filename) {
+  FILE *out;
+  size_t count;
+  char buf[BUF_SIZE];
+  
+  out = fopen(filename, "w");
+  
+  if (out == NULL) {
+    perror("Fopen failed");
+    exit(1);
+  }
+  
+  while (count = gpgme_data_read(outdata->cipher, buf, BUF_SIZE)) {
+    if (count == -1) {
+      perror("Gpgme_data_read function failed");
+      exit(1);
+    }
+    
+    fwrite(buf, 1, count, out);
+  }
+  fclose(out);
 }
