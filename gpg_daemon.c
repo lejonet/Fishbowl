@@ -250,6 +250,7 @@ void write_to_file(struct gpg_data *outdata, char *filename) {
     exit(1);
   }
   
+  gpgme_data_seek (outdata->cipher, 0, SEEK_SET);
   while (count = gpgme_data_read(outdata->cipher, buf, BUF_SIZE)) {
     if (count == -1) {
       perror("Gpgme_data_read function failed");
