@@ -5,4 +5,4 @@ all:
 	gcc ${EXTRA_CFLAGS} ${LIBS} -o fishbowl fishbowl.c
 
 clean:
-	rm -f fishbowl core a.out *.o TEST_OUT/*
+	rm -f fishbowl fishbowl*.log core a.out *.o TEST_OUT/*
