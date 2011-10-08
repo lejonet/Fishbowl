@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <errno.h>
+#include <time.h>
 #include <gpgme.h>
 #include <string.h>
 #include <locale.h>
@@ -79,6 +80,12 @@ unsigned int count = 0;
 void _log (FILE *fp, char *format, ...)
 {
 	va_list list;
+	time_t tstamp;
+	char buf[SIZE];
+
+	time(&tstamp);
+	strftime(buf, SIZE, "%Y%m%d %H:%M:%S", localtime(&tstamp));
+	fprintf(fp, "%s ", buf);
 
 	va_start(list, format);
 	vfprintf(fp, format, list);
