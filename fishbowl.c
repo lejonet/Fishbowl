@@ -22,8 +22,8 @@
  *   error-log = <file>
  *   fishbowl = <folder>
  *   leakbowl = <folder>
- *   fishbowl_id = <gpg id>
- *   leakbowl_id = <gpg id>
+ *   fishbowl-id = <gpg-id>
+ *   leakbowl-id = <gpg-id>
  * parse argv
  *   -b/--batch: just run once and shutdown
  *   (basically only calling pickup_fishes)
@@ -35,8 +35,8 @@
  *   -e/--error-log <file>
  *   -f/--fishbowl <folder>
  *   -l/--leakbowl <folder>
- *   -F/--fishbowl-id <gpg id>
- *   -L/--leakbowl-id <gpg id>
+ *   -F/--fishbowl-id <gpg-id>
+ *   -L/--leakbowl-id <gpg-id>
  */
 
 #define BIN "/usr/bin/gpg"
@@ -187,7 +187,12 @@ void catch_a_fish (char *path, char* name)
 	snprintf(fish, PATH_MAX, "%s/%s", path, name);
 	log_audit("New!   fish number %u: `%s'\n", ++count, fish);
 
-	decrypt(fish, &plain);
+	if (!decrypt(fish, &plain)) {
+		log_audit("Fail!  fish number %u: `%s' (decryption failure)\n", count, fish);
+		log_error("decryption failed for file: `%s' (%u)\n", fish, count);
+		return;
+	}
+		
 	encrypt(&plain, &cipher);
 
 	snprintf(fish, PATH_MAX, "%s/%s.gpg", leakbowl, name);
