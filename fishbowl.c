@@ -14,15 +14,35 @@
 
 /*
  * TODO
+ * avoid crashes when opening invalid files
  * parse config file
+ *   gpgdir = <folder>
+ *   audit-log = <file>
+ *   error-log = <file>
+ *   fishbowl = <folder>
+ *   leakbowl = <folder>
+ *   fishbowl_id = <gpg id>
+ *   leakbowl_id = <gpg id>
  * parse argv
+ *   -b/--batch: just run once and shutdown
+ *   (basically only calling pickup_fishes)
+ *   -c/--config <file>
+ *   -g/--gpgdir <folder>
+ *   -v/--verbose
+ *   -h/--help
+ *   -a/--audit-log <file>
+ *   -e/--error-log <file>
+ *   -f/--fishbowl <folder>
+ *   -l/--leakbowl <folder>
+ *   -F/--fishbowl-id <gpg id>
+ *   -L/--leakbowl-id <gpg id>
  */
 
 #define BIN "/usr/bin/gpg"
 #define KEYID "D09AFF79"
 #define CONFIG ".gnupg"
 #define FISHBOWL "./gpgtest"
-#define LEAKBOWL "./TEST_OUT"
+#define LEAKBOWL "./leakbowl"
 #define AUDIT_LOG "./fishbowl_audit.log"
 #define ERROR_LOG "./fishbowl_error.log"
 
