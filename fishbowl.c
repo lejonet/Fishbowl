@@ -6,9 +6,11 @@
 #include <string.h>
 #include <locale.h>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
 #define BIN "/usr/bin/gpg"
+#define OUT "./TEST_OUT"
 #define KEYID "D09AFF79"
 #define CONFIG ".gnupg"
 
@@ -125,7 +127,7 @@ void catch_a_fish (char *path, char* name)
 	decrypt(fish, &plain);
 	encrypt(&plain, &cipher);
 
-	snprintf(fish, PATH_MAX, "./TEST_OUT/%s.gpg", name);
+	snprintf(fish, PATH_MAX, OUT"/%s.gpg", name);
 	write_file(&cipher, fish);
 }
 
@@ -160,6 +162,8 @@ void go_fishing (char *fishbowl)
 void init_fishbowl (void)
 {
 	gpgme_error_t error;
+
+	mkdir(OUT, 0700);
 
 	error = gpgme_engine_check_version(GPGME_PROTOCOL_OpenPGP);
 	fail_if_error(error);
