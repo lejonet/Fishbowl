@@ -169,7 +169,7 @@ void catch_a_fish (char *path, char* name)
   gpgme_data_t plain, cipher;
 
   snprintf(fish, PATH_MAX, "%s/%s", path, name);
-  log_audit("New!   fish number %u: `%s'\n", ++count, fish);
+  log_audit("New! fish number %u: `%s'\n", ++count, fish);
 
   if (!decrypt(fish, &plain)) {
     //log_audit("Fail!  fish number %u: `%s' (decryption failure)\n", count, fish);
