@@ -1,4 +1,4 @@
-LIBS=-lgpgme
+LIBS=`gpgme-config --cflags --libs`
 EXTRA_CFLAGS=-ggdb
 
 all:
