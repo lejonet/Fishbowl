@@ -195,7 +195,7 @@ void catch_a_fish (char *path, char* name)
 		
 	encrypt(&plain, &cipher);
 
-	snprintf(fish, PATH_MAX, "%s/%s.gpg", leakbowl, name);
+	snprintf(fish, PATH_MAX, "%s/%s", leakbowl, name);
 	write_file(&cipher, fish);
 	log_audit("Moved! fish number %u: `%s'\n", count, fish);
 }
