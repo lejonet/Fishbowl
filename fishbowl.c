@@ -20,8 +20,7 @@
  * avoid crashes when opening invalid files
  * parse config file
  *   gpgdir = <folder>
- *   audit-log = <file>
- *   error-log = <file>
+ *   log = <file>
  *   fishbowl = <folder>
  *   leakbowl = <folder>
  *   fishbowl-id = <gpg-id>
@@ -33,8 +32,7 @@
  *   -g/--gpgdir <folder>
  *   -v/--verbose
  *   -h/--help
- *   -a/--audit-log <file>
- *   -e/--error-log <file>
+ *   -d/--debug <file>
  *   -f/--fishbowl <folder>
  *   -l/--leakbowl <folder>
  *   -F/--fishbowl-id <gpg-id>
@@ -47,7 +45,6 @@
 #define FISHBOWL "./gpgtest"
 #define LEAKBOWL "./leakbowl"
 #define LOG "./fishbowl.log"
-//#define ERROR_LOG "./fishbowl_error.log"
 
 #define SIZE 4096
 #define log_audit(...) _log("AUDIT", __VA_ARGS__)
@@ -69,8 +66,6 @@ char *config = CONFIG;
 char *fishbowl = FISHBOWL;
 char *leakbowl = LEAKBOWL;
 char *log_file = LOG;
-//char *error_log = ERROR_LOG;
-//FILE *fp_audit, *fp_error;
 
 gpgme_ctx_t ctx;
 
@@ -169,26 +164,36 @@ gpgme_data_t *encrypt (gpgme_data_t *plain, gpgme_data_t *cipher) {
 }
 
 void catch_a_fish (char *path, char* name) {
-  char fish[PATH_MAX], new_fish[PATH_MAX], shred_command[PATH_MAX+20];
-  gpgme_data_t plain, cipher;
-
-  snprintf(fish, PATH_MAX, "%s/%s", path, name);
-  log_audit("New fish: `%s'\n", fish);
-
-  if (!decrypt(fish, &plain)) {
-    //log_audit("Fail!  fish number %u: `%s' (decryption failure)\n", count, fish);
-    log_error("decryption failed for file: `%s'\n", fish);
-    return;
-  }
-		
-  encrypt(&plain, &cipher);
+  int pid;
   
-  snprintf(new_fish, PATH_MAX, "%s/%s", leakbowl, name);
-  write_file(&cipher, new_fish);
-  log_audit("Moved! fish: `%s'\n", new_fish);
-  snprintf(shred_command, PATH_MAX+20, "/usr/bin/shred -n5 -zu %s", fish);
-  log_audit("Shred_command: %s\n", shred_command);
-  system(shred_command);
+  pid = fork();
+
+  if (pid == 0) {
+    char fish[PATH_MAX], new_fish[PATH_MAX], shred_command[PATH_MAX+20];
+    gpgme_data_t plain, cipher;
+
+    snprintf(fish, PATH_MAX, "%s/%s", path, name);
+    log_audit("New fish: `%s'\n", fish);
+
+    if (!decrypt(fish, &plain)) {
+      log_error("decryption failed for file: `%s'\n", fish);
+      return;
+    }
+		
+    encrypt(&plain, &cipher);
+    snprintf(new_fish, PATH_MAX, "%s/%s", leakbowl, name);
+    write_file(&cipher, new_fish);
+    log_audit("Moved! fish: `%s'\n", new_fish);
+
+    snprintf(shred_command, PATH_MAX+20, "/usr/bin/shred -n5 -zu %s", fish);
+    //  log_audit("Shred_command: %s\n", shred_command);
+    system(shred_command);
+    exit(0);
+  } else if (pid > 0) {
+    ;
+  } else {
+    log_error("Fork failed: %s", strerror(errno));
+  }
 }
 
 void pickup_fishes (char *fishbowl) {
@@ -225,7 +230,8 @@ void go_fishing (char *fishbowl) {
     return;
   }
 
-  ret = inotify_add_watch(fd, fishbowl, IN_MOVED_TO);
+  //  ret = inotify_add_watch(fd, fishbowl, IN_MOVED_TO|IN_CLOSE_WRITE);
+  ret = inotify_add_watch(fd, fishbowl, IN_CREATE);
   if (ret < 0) {
     log_error("inotify_add_watch failed: `%s'\n", fishbowl);
     return;
@@ -239,17 +245,8 @@ void go_fishing (char *fishbowl) {
       break;
     }
 
-    pid = fork();
     event = (struct inotify_event *)buf;
-
-    if (pid == 0) {
-      catch_a_fish(fishbowl, event->name);
-      exit(0);
-    } else if (pid > 0) {
-      ;
-    } else {
-      log_error("Fork failed: %s", strerror(errno));
-    }
+    catch_a_fish(fishbowl, event->name);
 
   } while (1);
 
