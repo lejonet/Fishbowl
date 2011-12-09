@@ -72,6 +72,7 @@ gpgme_ctx_t ctx;
 void clean_up_child_process (int signal_number) {
   int status;
   wait(&status);
+  log_audit("A child was taken care of.");
 }
 
 void _log (char *type, char *format, ...) {
@@ -186,7 +187,6 @@ void catch_a_fish (char *path, char* name) {
     log_audit("Moved! fish: `%s'\n", new_fish);
 
     snprintf(shred_command, PATH_MAX+20, "/usr/bin/shred -n5 -zu %s", fish);
-    //  log_audit("Shred_command: %s\n", shred_command);
     system(shred_command);
     exit(0);
   } else if (pid > 0) {
@@ -242,7 +242,6 @@ void go_fishing (char *fishbowl) {
     ret = read(fd, buf, SIZE);
     if (ret < 1) {
       log_audit("end of read, quitting\n");
-      break;
     }
 
     event = (struct inotify_event *)buf;
