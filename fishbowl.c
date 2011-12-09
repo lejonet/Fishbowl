@@ -12,7 +12,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/inotify.h>
-#include <sys/file.h>
+#include <signal.h>
+#include <wait.h>
 
 /*
  * TODO
@@ -72,10 +73,13 @@ char *log_file = LOG;
 //FILE *fp_audit, *fp_error;
 
 gpgme_ctx_t ctx;
-unsigned int count = 0;
 
-void _log (char *type, char *format, ...)
-{
+void clean_up_child_process (int signal_number) {
+  int status;
+  wait(&status);
+}
+
+void _log (char *type, char *format, ...) {
   va_list list;
   time_t tstamp;
   char buf[SIZE];
@@ -93,8 +97,7 @@ void _log (char *type, char *format, ...)
   fclose(fp_log);
 }
 
-void write_file (gpgme_data_t *data, char *file)
-{
+void write_file (gpgme_data_t *data, char *file) {
   FILE *fp;
   int count;
   char buf[SIZE];
@@ -118,8 +121,7 @@ void write_file (gpgme_data_t *data, char *file)
   fclose(fp);
 }
 
-gpgme_data_t *decrypt (char *file, gpgme_data_t *plain)
-{
+gpgme_data_t *decrypt (char *file, gpgme_data_t *plain) {
   FILE *fp;
   gpgme_data_t cipher;
   gpgme_error_t error;
@@ -146,8 +148,7 @@ gpgme_data_t *decrypt (char *file, gpgme_data_t *plain)
   return plain;
 }
 
-gpgme_data_t *encrypt (gpgme_data_t *plain, gpgme_data_t *cipher)
-{
+gpgme_data_t *encrypt (gpgme_data_t *plain, gpgme_data_t *cipher) {
   gpgme_error_t error;
   gpgme_key_t rcpt[2] = {NULL, NULL};
 
@@ -167,17 +168,16 @@ gpgme_data_t *encrypt (gpgme_data_t *plain, gpgme_data_t *cipher)
   return cipher;
 }
 
-void catch_a_fish (char *path, char* name)
-{
-  char fish[PATH_MAX], new_fish[PATH_MAX];
+void catch_a_fish (char *path, char* name) {
+  char fish[PATH_MAX], new_fish[PATH_MAX], shred_command[PATH_MAX+20];
   gpgme_data_t plain, cipher;
 
   snprintf(fish, PATH_MAX, "%s/%s", path, name);
-  log_audit("New! fish number %u: `%s'\n", ++count, fish);
+  log_audit("New fish: `%s'\n", fish);
 
   if (!decrypt(fish, &plain)) {
     //log_audit("Fail!  fish number %u: `%s' (decryption failure)\n", count, fish);
-    log_error("decryption failed for file: `%s' (%u)\n", fish, count);
+    log_error("decryption failed for file: `%s'\n", fish);
     return;
   }
 		
@@ -185,13 +185,13 @@ void catch_a_fish (char *path, char* name)
   
   snprintf(new_fish, PATH_MAX, "%s/%s", leakbowl, name);
   write_file(&cipher, new_fish);
-  log_audit("Moved! fish number %u: `%s'\n", count, new_fish);
-
-  execlp("/usr/bin/shred", "-n5", "-z", "-u", fish, NULL);
+  log_audit("Moved! fish: `%s'\n", new_fish);
+  snprintf(shred_command, PATH_MAX+20, "/usr/bin/shred -n5 -zu %s", fish);
+  log_audit("Shred_command: %s\n", shred_command);
+  system(shred_command);
 }
 
-void pickup_fishes (char *fishbowl)
-{
+void pickup_fishes (char *fishbowl) {
   DIR *dirp;
   struct dirent *dentry;
 
@@ -212,8 +212,7 @@ void pickup_fishes (char *fishbowl)
   closedir(dirp);
 }
 
-void go_fishing (char *fishbowl)
-{
+void go_fishing (char *fishbowl) {
   int fd, ret, pid;
   char buf[SIZE];
   struct inotify_event *event;
@@ -226,7 +225,7 @@ void go_fishing (char *fishbowl)
     return;
   }
 
-  ret = inotify_add_watch(fd, fishbowl, IN_CLOSE_WRITE|IN_MOVED_TO);
+  ret = inotify_add_watch(fd, fishbowl, IN_MOVED_TO);
   if (ret < 0) {
     log_error("inotify_add_watch failed: `%s'\n", fishbowl);
     return;
@@ -241,16 +240,15 @@ void go_fishing (char *fishbowl)
     }
 
     pid = fork();
+    event = (struct inotify_event *)buf;
 
     if (pid == 0) {
-      //    log_audit("fish %d path before shredding: %s\n", count, fish);
-      event = (struct inotify_event *)buf;
       catch_a_fish(fishbowl, event->name);
       exit(0);
     } else if (pid > 0) {
-      //    log_audit("fish %d: shredded successfully\n", count);
+      ;
     } else {
-      perror("fork failed:");
+      log_error("Fork failed: %s", strerror(errno));
     }
 
   } while (1);
@@ -258,31 +256,19 @@ void go_fishing (char *fishbowl)
   close(fd);
 }
 
-int init_fishbowl (void)
-{
+int init_fishbowl (void) {
   int ret, armor = 1;
   gpgme_error_t error;
+  struct sigaction sigchld_action;
 
-  /*  fp_audit = fopen(audit_log, "a");
-    if (!fp_audit) {
-    perror("fopen failed to open audit_log:");
-    //    log_error("fopen failed: `%s'\n", audit_log);
-    return 0;
-    }
-		
-  fp_error = fopen(error_log, "a");
-  if (!fp_error) {
-    perror("fopen failed to open error_log:");
-    //    log_error("fopen failed: `%s'\n", error_log);
-    return 0;
-    }*/
+  memset(&sigchld_action, 0, sizeof(struct sigaction));
+  sigchld_action.sa_handler = &clean_up_child_process;
+  sigaction(SIGCHLD, &sigchld_action, NULL);
 
   error = gpgme_engine_check_version(GPGME_PROTOCOL_OpenPGP);
   fail_if_error(error, 0);
-
   error = gpgme_set_engine_info(GPGME_PROTOCOL_OpenPGP, bin, config);
   fail_if_error(error, 0);
-
   gpgme_check_version(NULL);
   setlocale(LC_ALL, "");
   gpgme_set_locale(NULL, LC_CTYPE, setlocale(LC_CTYPE, NULL));
@@ -295,15 +281,7 @@ int init_fishbowl (void)
   return 1;
 }
 
-void cleanup_fishbowl (void)
-{
-  gpgme_release(ctx);
-  //  fclose(fp_audit);
-  //  fclose(fp_error);
-}
-
-int main (void)
-{
+int main (void) {
   if (!init_fishbowl()) {
     fprintf(stderr, "initialization failed, quitting\n");
     exit(EXIT_FAILURE);
@@ -312,7 +290,7 @@ int main (void)
 
   daemon(1, 0);
   go_fishing(fishbowl);
-  cleanup_fishbowl();
+  gpgme_release(ctx);
 
   return 0;
 }
