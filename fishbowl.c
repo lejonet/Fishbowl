@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/inotify.h>
+#include <sys/file.h>
 
 /*
  * TODO
@@ -44,12 +45,12 @@
 #define CONFIG ".gnupg"
 #define FISHBOWL "./gpgtest"
 #define LEAKBOWL "./leakbowl"
-#define AUDIT_LOG "./fishbowl_audit.log"
-#define ERROR_LOG "./fishbowl_error.log"
+#define LOG "./fishbowl.log"
+//#define ERROR_LOG "./fishbowl_error.log"
 
 #define SIZE 4096
-#define log_audit(...) _log(fp_audit, __VA_ARGS__)
-#define log_error(...) _log(fp_error, __VA_ARGS__)
+#define log_audit(...) _log("AUDIT", __VA_ARGS__)
+#define log_error(...) _log("ERROR", __VA_ARGS__)
 #define fail_if_error(error, ret)		\
   do {						\
     if (error) {				\
@@ -66,27 +67,30 @@ char *keyid = KEYID;
 char *config = CONFIG;
 char *fishbowl = FISHBOWL;
 char *leakbowl = LEAKBOWL;
-char *audit_log = AUDIT_LOG;
-char *error_log = ERROR_LOG;
-FILE *fp_audit, *fp_error;
+char *log_file = LOG;
+//char *error_log = ERROR_LOG;
+//FILE *fp_audit, *fp_error;
 
 gpgme_ctx_t ctx;
 unsigned int count = 0;
 
-void _log (FILE *fp, char *format, ...)
+void _log (char *type, char *format, ...)
 {
   va_list list;
   time_t tstamp;
   char buf[SIZE];
+  FILE *fp_log;
 
   time(&tstamp);
-  strftime(buf, SIZE, "%Y%m%d %H:%M:%S", localtime(&tstamp));
-  fprintf(fp, "%s ", buf);
+  strftime(buf, SIZE, "%Y-%m-%d %H:%M:%S", localtime(&tstamp));
+  fp_log = fopen(log_file, "a");
+  fprintf(fp_log, "%s %s ", buf, type);
 
   va_start(list, format);
-  vfprintf(fp, format, list);
+  vfprintf(fp_log, format, list);
   va_end(list);
-  fflush(fp);
+  fflush(fp_log);
+  fclose(fp_log);
 }
 
 void write_file (gpgme_data_t *data, char *file)
@@ -165,7 +169,7 @@ gpgme_data_t *encrypt (gpgme_data_t *plain, gpgme_data_t *cipher)
 
 void catch_a_fish (char *path, char* name)
 {
-  char fish[PATH_MAX];
+  char fish[PATH_MAX], new_fish[PATH_MAX];
   gpgme_data_t plain, cipher;
 
   snprintf(fish, PATH_MAX, "%s/%s", path, name);
@@ -178,10 +182,12 @@ void catch_a_fish (char *path, char* name)
   }
 		
   encrypt(&plain, &cipher);
+  
+  snprintf(new_fish, PATH_MAX, "%s/%s", leakbowl, name);
+  write_file(&cipher, new_fish);
+  log_audit("Moved! fish number %u: `%s'\n", count, new_fish);
 
-  snprintf(fish, PATH_MAX, "%s/%s", leakbowl, name);
-  write_file(&cipher, fish);
-  log_audit("Moved! fish number %u: `%s'\n", count, fish);
+  execlp("/usr/bin/shred", "-n5", "-z", "-u", fish, NULL);
 }
 
 void pickup_fishes (char *fishbowl)
@@ -208,7 +214,7 @@ void pickup_fishes (char *fishbowl)
 
 void go_fishing (char *fishbowl)
 {
-  int fd, ret;
+  int fd, ret, pid;
   char buf[SIZE];
   struct inotify_event *event;
 
@@ -234,8 +240,18 @@ void go_fishing (char *fishbowl)
       break;
     }
 
-    event = (struct inotify_event *)buf;
-    catch_a_fish(fishbowl, event->name);
+    pid = fork();
+
+    if (pid == 0) {
+      //    log_audit("fish %d path before shredding: %s\n", count, fish);
+      event = (struct inotify_event *)buf;
+      catch_a_fish(fishbowl, event->name);
+      exit(0);
+    } else if (pid > 0) {
+      //    log_audit("fish %d: shredded successfully\n", count);
+    } else {
+      perror("fork failed:");
+    }
 
   } while (1);
 
@@ -247,19 +263,19 @@ int init_fishbowl (void)
   int ret, armor = 1;
   gpgme_error_t error;
 
-  fp_audit = fopen(audit_log, "a");
-  if (!fp_audit) {
+  /*  fp_audit = fopen(audit_log, "a");
+    if (!fp_audit) {
     perror("fopen failed to open audit_log:");
     //    log_error("fopen failed: `%s'\n", audit_log);
     return 0;
-  }
+    }
 		
   fp_error = fopen(error_log, "a");
   if (!fp_error) {
     perror("fopen failed to open error_log:");
     //    log_error("fopen failed: `%s'\n", error_log);
     return 0;
-  }
+    }*/
 
   error = gpgme_engine_check_version(GPGME_PROTOCOL_OpenPGP);
   fail_if_error(error, 0);
@@ -279,19 +295,13 @@ int init_fishbowl (void)
   return 1;
 }
 
-/*
- *
- */
 void cleanup_fishbowl (void)
 {
   gpgme_release(ctx);
-  fclose(fp_audit);
-  fclose(fp_error);
+  //  fclose(fp_audit);
+  //  fclose(fp_error);
 }
 
-/*
- *
- */
 int main (void)
 {
   if (!init_fishbowl()) {
