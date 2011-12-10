@@ -69,12 +69,6 @@ char *log_file = LOG;
 
 gpgme_ctx_t ctx;
 
-void clean_up_child_process (int signal_number) {
-  int status;
-  wait(&status);
-  log_audit("A child was taken care of.");
-}
-
 void _log (char *type, char *format, ...) {
   va_list list;
   time_t tstamp;
@@ -91,6 +85,12 @@ void _log (char *type, char *format, ...) {
   va_end(list);
   fflush(fp_log);
   fclose(fp_log);
+}
+
+void clean_up_child_process (int signal_number) {
+  int status;
+  wait(&status);
+  //  log_audit("A child was taken care of.\n");
 }
 
 void write_file (gpgme_data_t *data, char *file) {
@@ -170,7 +170,7 @@ void catch_a_fish (char *path, char* name) {
   pid = fork();
 
   if (pid == 0) {
-    char fish[PATH_MAX], new_fish[PATH_MAX], shred_command[PATH_MAX+20];
+    char fish[PATH_MAX], new_fish[PATH_MAX], delete_command[PATH_MAX+20];
     gpgme_data_t plain, cipher;
 
     snprintf(fish, PATH_MAX, "%s/%s", path, name);
@@ -186,8 +186,8 @@ void catch_a_fish (char *path, char* name) {
     write_file(&cipher, new_fish);
     log_audit("Moved! fish: `%s'\n", new_fish);
 
-    snprintf(shred_command, PATH_MAX+20, "/usr/bin/shred -n5 -zu %s", fish);
-    system(shred_command);
+    snprintf(delete_command, PATH_MAX+20, "/bin/rm -f %s", fish);
+    system(delete_command);
     exit(0);
   } else if (pid > 0) {
     ;
@@ -230,8 +230,8 @@ void go_fishing (char *fishbowl) {
     return;
   }
 
-  //  ret = inotify_add_watch(fd, fishbowl, IN_MOVED_TO|IN_CLOSE_WRITE);
-  ret = inotify_add_watch(fd, fishbowl, IN_CREATE);
+  ret = inotify_add_watch(fd, fishbowl, IN_CLOSE_WRITE|IN_CREATE|IN_MOVED_TO);
+  //ret = inotify_add_watch(fd, fishbowl, IN_CREATE);
   if (ret < 0) {
     log_error("inotify_add_watch failed: `%s'\n", fishbowl);
     return;
@@ -241,12 +241,12 @@ void go_fishing (char *fishbowl) {
     memset(buf, 0, SIZE);
     ret = read(fd, buf, SIZE);
     if (ret < 1) {
-      log_audit("end of read, quitting\n");
+      //  log_audit("end of read, quitting\n");
+      continue;
     }
 
     event = (struct inotify_event *)buf;
     catch_a_fish(fishbowl, event->name);
-
   } while (1);
 
   close(fd);
