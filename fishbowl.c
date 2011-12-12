@@ -164,30 +164,34 @@ gpgme_data_t *encrypt (gpgme_data_t *plain, gpgme_data_t *cipher) {
   return cipher;
 }
 
-void catch_a_fish (char *path, char* name) {
+void process_a_fish (char *path, char *name) {
+  char fish[PATH_MAX], new_fish[PATH_MAX], delete_command[PATH_MAX+20];
+  gpgme_data_t plain, cipher;
+
+  snprintf(fish, PATH_MAX, "%s/%s", path, name);
+  log_audit("New fish: `%s'\n", fish);
+
+  if (!decrypt(fish, &plain)) {
+    log_error("decryption failed for file: `%s'\n", fish);
+    return;
+  }
+		
+  encrypt(&plain, &cipher);
+  snprintf(new_fish, PATH_MAX, "%s/%s", leakbowl, name);
+  write_file(&cipher, new_fish);
+  log_audit("Moved! fish: `%s'\n", new_fish);
+
+  snprintf(delete_command, PATH_MAX+20, "/bin/rm -f %s", fish);
+  system(delete_command);
+}
+
+void catch_a_fish (char *path, char *name) {
   int pid;
   
   pid = fork();
 
   if (pid == 0) {
-    char fish[PATH_MAX], new_fish[PATH_MAX], delete_command[PATH_MAX+20];
-    gpgme_data_t plain, cipher;
-
-    snprintf(fish, PATH_MAX, "%s/%s", path, name);
-    log_audit("New fish: `%s'\n", fish);
-
-    if (!decrypt(fish, &plain)) {
-      log_error("decryption failed for file: `%s'\n", fish);
-      return;
-    }
-		
-    encrypt(&plain, &cipher);
-    snprintf(new_fish, PATH_MAX, "%s/%s", leakbowl, name);
-    write_file(&cipher, new_fish);
-    log_audit("Moved! fish: `%s'\n", new_fish);
-
-    snprintf(delete_command, PATH_MAX+20, "/bin/rm -f %s", fish);
-    system(delete_command);
+    process_a_fish(path, name);
     exit(0);
   } else if (pid > 0) {
     ;
@@ -230,7 +234,7 @@ void go_fishing (char *fishbowl) {
     return;
   }
 
-  ret = inotify_add_watch(fd, fishbowl, IN_CLOSE_WRITE|IN_CREATE|IN_MOVED_TO);
+  ret = inotify_add_watch(fd, fishbowl, IN_CLOSE_WRITE|IN_MOVED_TO);
   //ret = inotify_add_watch(fd, fishbowl, IN_CREATE);
   if (ret < 0) {
     log_error("inotify_add_watch failed: `%s'\n", fishbowl);
