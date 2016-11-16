@@ -10,3 +10,6 @@ I have used the [gpgme library] [1] for the gpg interaction parts and system rel
 
 ## License
 I am releasing everything under the GPLv2 license, copy it, share it, use it and do it with happiness and motivation to help people.
+
+## Disclaimer
+This was just a hobby project that never really went anywhere, so it shouldn't be used for anything requiring actual security, as very little auditing of the code has been done
